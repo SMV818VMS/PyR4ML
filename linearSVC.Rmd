@@ -1,0 +1,376 @@
+---
+title: "linearSVC"
+author: "Miravet-Verde, Samuel"
+date: "February 9, 2016"
+output: html_document
+runtime: shiny 
+---
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+# Linear SVM
+
+We are going to start generating a toy dataset in 2D and learn how to train and test a SVM
+
+## Generate toy data
+
+First generate a set of positive and negative examples from 2 Gaussian distributions.
+
+```{r}
+n <- 150 # Number of datapoints
+p <- 2   # dimension
+
+sigma <- 1   # variance of the distribution
+meanpos <- 0 # centre of the distribution of positive examples
+meanneg <- 3 # centre of the distribution of negative examples
+
+npos <- round(n/2) # number of positive examples
+nneg <- n-npos     # number of negative examples
+```
+
+These features are going to be used to generate our example or training cases (x). As SVM requires labelled data, we also need a matrix y with the labels for our cases:
+
+```{r}
+# Generate the positive and negative examples
+xpos <- matrix(rnorm(npos*p, mean=meanpos, sd=sigma), npos, p)
+xneg <- matrix(rnorm(nneg*p, mean=meanneg, sd=sigma), nneg, p)
+x <- rbind(xpos, xneg)
+
+# Generate the labels
+y <- matrix(c(rep(1, npos), rep(-1, nneg)))
+
+# Visualize the data
+plot(x, col=ifelse(y>0,1,2))
+legend("topleft", c('Positive', 'Negative'), col=seq(2), pch=1, text.col=seq(2))
+```
+
+In order to train the model we split the data into a training set (80%) and a test set (20%):
+
+```{r}
+ntrain <- round(n*0.8)  # Number of training examples
+tindex <- sample(n, ntrain) # indices of training samples
+xtrain <- x[tindex,]
+xtest  <- x[-tindex,]
+
+ytrain <- y[tindex,]
+ytest  <- y[-tindex,]
+
+istrain <- rep(0, n)
+istrain[tindex] <- 1
+
+# Visualize
+plot(x, col=ifelse(y > 0,1,2), pch=ifelse(istrain == 1,1,2))
+legend('topleft', c('Positive Train', 'Positive Test', 'Negative Train', 'Negative Test'), col=c(1,1,2,2), pch=c(1,2,1,2), text.col=c(1,1,2,2))
+```
+
+## Train a SVM
+
+Now we train a linear SVM with parameter C=100 on the training set. 
+
+```{r}
+# Load the package with the SVM functions
+library(kernlab)
+
+# Train the SVM
+svp <- ksvm(xtrain, ytrain, type='C-svc', kernel='vanilladot', C=100, scaled=c())
+```
+
+We are going to look what svp contains and understand the attributes presented:
+
+```{r}
+# a general summary
+svp
+
+# Attributes you can acces
+attributes(svp)
+
+# For instance, the support vectors
+alpha(svp)
+alphaindex(svp)
+b(svp)
+
+# Use the built-in function to pretty-plot the classifier
+plot(svp,data=xtrain)
+```
+
+## Predict with a SVM
+
+Now we can use the trained SVM to predict the label of points in the test set and analyze the results using variant metrics
+
+```{r}
+# Predict the labels on test
+ypred <- predict(svp, xtest)
+table(ytest, ypred)
+
+# Compute accuracy
+sum(ypred==ytest)/length(ytest)
+
+# Compute at the prediction scores
+ypredscore = predict(svp, xtest, type='decision')
+# Check that the predicted labels are the sign of the scores
+table(ypredscore > 0, ypred)
+```
+
+Use the package ROCR to compute and plot ROC curve, precision-recall and accuracy plots:
+
+```{r}
+library(ROCR)
+
+pred <- prediction(ypredscore, ytest)
+
+# Plot ROC Curve
+perf <- performance(pred, measure = 'tpr', x.measure = 'fpr')
+plot(perf)
+
+# Plot Precision/Recall curve
+perf <- performance(pred, measure = 'prec', x.measure = 'rec')
+plot(perf)
+
+# Plot accuracy as function of threshold
+perf <- performance(pred, measure = 'acc')
+plot(perf)
+```
+
+## Cross-Validation
+
+Instead of fixing a training and a test set, we can improve the quality of these estimatees by running _k_-fold cross-validation. We split the training set in _k_ groups of approximately the same size, then iteratively train a SVM using _k_-1 group and make the prediction of the group which was left aside. 
+
+When _k_ is equal to the number of training point, we are talking about a leave-one-out (LOO) cross-validation. To generate a random split of _n_ points in _k_ folds, we can for example create the following function:
+
+```{r}
+# The function ksvm is able to run a k fold cross-validation accuracy, let's consider a k=5
+svp <- ksvm(x, y, type='C-svc', kernel='vanilladot', C=1, scaled=c(), cross=5)
+
+print(cross(svp))
+```
+
+## Effect of C
+
+The C parameters balances the trade-off between having a large margin and separating the positive and unlabeled on the training set. It is important to choose it well to have a good generalization:
+
+```{r}
+for (i in 2^seq(-10,15)){
+  print(i)
+  svp <- ksvm(xtrain, ytrain, type='C-svc', kernel='vanilladot', C=i, scaled=c())
+  par(ask=T)
+  plot(svp, data=xtrain)
+}
+```
+
+We can plot the 5-fold cross-validation error as a function of C.
+
+```{r}
+cs <- c()
+errors <- c()
+
+for (i in 2^seq(-10,15)){
+  svp <- ksvm(xtrain, ytrain, type='C-svc', kernel='vanilladot', C=i, scaled=c(), cross=5)
+  
+  cs <- append(cs, i)
+  errors <- append(errors, error(svp))
+}
+
+plot(errors~cs)
+```
+
+## Repeat with a more overlap dataset
+
+```{r}
+n <- 150 # Number of datapoints
+p <- 2   # dimension
+
+sigma <- 1   # variance of the distribution
+meanpos <- 0 # centre of the distribution of positive examples
+meanneg <- 1 # centre of the distribution of negative examples
+
+npos <- round(n/2) # number of positive examples
+nneg <- n-npos     # number of negative examples
+
+# Generate the positive and negative examples
+xpos <- matrix(rnorm(npos*p, mean=meanpos, sd=sigma), npos, p)
+xneg <- matrix(rnorm(nneg*p, mean=meanneg, sd=sigma), nneg, p)
+x <- rbind(xpos, xneg)
+
+# Generate the labels
+y <- matrix(c(rep(1, npos), rep(-1, nneg)))
+
+# Visualize the data
+plot(x, col=ifelse(y>0,1,2))
+legend("topleft", c('Positive', 'Negative'), col=seq(2), pch=1, text.col=seq(2))
+
+ntrain <- round(n*0.8)  # Number of training examples
+tindex <- sample(n, ntrain) # indices of training samples
+xtrain <- x[tindex,]
+xtest  <- x[-tindex,]
+
+ytrain <- y[tindex,]
+ytest  <- y[-tindex,]
+
+istrain <- rep(0, n)
+istrain[tindex] <- 1
+
+# Visualize
+plot(x, col=ifelse(y > 0,1,2), pch=ifelse(istrain == 1,1,2))
+legend('topleft', c('Positive Train', 'Positive Test', 'Negative Train', 'Negative Test'), col=c(1,1,2,2), pch=c(1,2,1,2), text.col=c(1,1,2,2))
+
+# Train the SVM
+svp <- ksvm(xtrain, ytrain, type='C-svc', kernel='vanilladot', C=100, scaled=c())
+
+# a general summary
+svp
+
+# Attributes you can acces
+attributes(svp)
+
+# For instance, the support vectors
+alpha(svp)
+alphaindex(svp)
+b(svp)
+
+# Use the built-in function to pretty-plot the classifier
+plot(svp,data=xtrain)
+
+# Predict the labels on test
+ypred <- predict(svp, xtest)
+table(ytest, ypred)
+
+# Compute accuracy
+sum(ypred==ytest)/length(ytest)
+
+# Compute at the prediction scores
+ypredscore = predict(svp, xtest, type='decision')
+# Check that the predicted labels are the sign of the scores
+table(ypredscore > 0, ypred)
+
+pred <- prediction(ypredscore, ytest)
+
+# Plot ROC Curve
+perf <- performance(pred, measure = 'tpr', x.measure = 'fpr')
+plot(perf)
+
+# Plot Precision/Recall curve
+perf <- performance(pred, measure = 'prec', x.measure = 'rec')
+plot(perf)
+
+# Plot accuracy as function of threshold
+perf <- performance(pred, measure = 'acc')
+plot(perf)
+
+# The function ksvm is able to run a k fold cross-validation accuracy, let's consider a k=5
+svp <- ksvm(x, y, type='C-svc', kernel='vanilladot', C=1, scaled=c(), cross=5)
+
+print(cross(svp))
+
+for (i in 2^seq(-10,15)){
+  print(i)
+  svp <- ksvm(xtrain, ytrain, type='C-svc', kernel='vanilladot', C=i, scaled=c())
+  par(ask=T)
+  plot(svp, data=xtrain)
+}
+
+cs <- c()
+errors <- c()
+
+for (i in 2^seq(-10,15)){
+  svp <- ksvm(xtrain, ytrain, type='C-svc', kernel='vanilladot', C=i, scaled=c(), cross=5)
+  
+  cs <- append(cs, i)
+  errors <- append(errors, error(svp))
+}
+
+plot(errors~cs)
+```
+
+# Nonliniar SVM
+
+Imagine a set where the datasets where positive and negative examples are mixture of two Gaussians
+
+```{r}
+# Generate the dataset:
+n <- 75 # Number of datapoints
+p <- 2   # dimension
+
+sigma <- 0.8   # variance of the distribution
+meanpos1 <- 0 # centre of the distribution of positive examples
+meanpos2 <- 3 # centre of the distribution of positive examples
+
+meanneg1 <- 0 # centre of the distribution of negative examples
+meanneg2 <- 3 # centre of the distribution of negative examples
+
+npos <- round(n/2) # number of positive examples
+nneg <- n-npos     # number of negative examples
+
+# Generate the positive and negative examples
+xpos1 <- matrix(rnorm(npos*p, mean=meanpos1, sd=sigma), npos, p)
+xpos2 <- matrix(rnorm(npos*p, mean=meanpos2, sd=sigma), npos, p)
+
+xpos <- rbind(xpos1,xpos2)
+
+xneg1 <- matrix(rnorm(nneg*p, mean=meanneg1, sd=sigma), nneg, p)
+xneg2 <- matrix(rnorm(nneg*p, mean=meanneg2, sd=sigma), nneg, p)
+xneg <- cbind(xneg1, xneg2)
+xneg1 <- xneg[,c(1,3)]
+xneg2 <- xneg[,c(4,2)]
+xneg <- rbind(xneg1, xneg2)
+
+x <- rbind(xpos, xneg)
+
+# Generate the labels
+y <- matrix(c(rep(1, npos*2), rep(-1, nneg*2)))
+
+# Visualize the data
+plot(x, col=ifelse(y>0,1,2))
+legend("topleft", c('Positive', 'Negative'), col=seq(2), pch=1, text.col=seq(2))
+
+ntrain <- round(n*0.8)  # Number of training examples
+tindex <- sample(n, ntrain) # indices of training samples
+xtrain <- x[tindex,]
+xtest  <- x[-tindex,]
+
+ytrain <- y[tindex,]
+ytest  <- y[-tindex,]
+
+istrain <- rep(0, n)
+istrain[tindex] <- 1
+
+# Visualize
+plot(x, col=ifelse(y > 0,1,2), pch=ifelse(istrain == 1,1,2))
+legend('topleft', c('Positive Train', 'Positive Test', 'Negative Train', 'Negative Test'), col=c(1,1,2,2), pch=c(1,2,1,2), text.col=c(1,1,2,2))
+```
+
+In this case the SVM we need to create differs in the kernel. We should use a nonlinear SVM, obtained changing the kernel parameter, for example to a Gaussian RBF kernel with sigma = 1 and C = 1:
+
+```{r}
+svp <- ksvm(x, y, type="C-svc", kernel='rbf', kpar=list(sigma=1), C=1)
+
+# Visualize
+plot(svp, data=x)
+```
+
+In this case the value of sigma has been manually selected but the package has the option to compute it heuristically based on the quantiles of distance between the training point.
+
+```{r}
+# Train a nonlinear SVM with automatic selection of sigma by heuristic
+svp <- ksvm(x, y, type='C-svc', kernel='rbf', C=1)
+# Visualize 
+plot(svp, data=x)
+```
+
+Example of classification in the model:
+
+```{r}
+xtest <- matrix(c(0,0,3,0), 2, 2)
+ytest <- c(-1,1)
+ypred <- predict(svp,xtest)
+table(ytest,ypred)
+```
+
+# More than binary classification
+
+In case we were working with a classification relating more than 2 classes we can use the library e1071 that work in a similar way but allows to easily make classifications between 3 classes:
+
+```{r}
+library(e1071)
+m <- svm(Species~., data = iris)
+plot(m, iris, Petal.Width ~ Petal.Length, slice = list(Sepal.Width = 3, Sepal.Length = 4))
+```
