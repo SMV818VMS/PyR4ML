@@ -7,7 +7,7 @@
 # 
 # ### Loading packages
 
-# In[695]:
+# In[85]:
 
 get_ipython().magic(u'matplotlib inline')
 
@@ -20,11 +20,12 @@ from sklearn.multiclass import OneVsRestClassifier
 from sklearn.cross_validation import StratifiedKFold
 from scipy import interp
 import matplotlib.pyplot as plt
+import seaborn
 
 
 # Some interesting general functions:
 
-# In[696]:
+# In[86]:
 
 def column(matrix, i):
     return [row[i] for row in matrix]
@@ -34,7 +35,7 @@ def column(matrix, i):
 # 
 # We are going to generate here a dataset to run a toy model:
 
-# In[697]:
+# In[87]:
 
 n = 150 # Number of datapoints
 p = 2   # Dimension
@@ -49,7 +50,7 @@ nneg = n - npos
 
 # These features are going to be used to generate our example or training cases (x). As SVM requires labelled data, we also need a matrix y with the labels for our cases:
 
-# In[698]:
+# In[88]:
 
 xpos = np.random.normal(meanpos, sigma, n)
 xneg = np.random.normal(meanneg, sigma, n)
@@ -68,7 +69,7 @@ plt.show()
 
 # We have there the two arrays with values, we need now the array with the labels:
 
-# In[699]:
+# In[89]:
 
 y = np.array([1, -1])
 y = np.repeat(y, [npos, nneg], axis=0)
@@ -84,7 +85,7 @@ y
 # 
 # Moving along, we are now going to define our classifier:
 
-# In[700]:
+# In[90]:
 
 clf = svm.SVC(kernel='linear', C = 1.0, probability=True)
 
@@ -93,7 +94,7 @@ clf = svm.SVC(kernel='linear', C = 1.0, probability=True)
 # 
 # First we have to fit the model:
 
-# In[701]:
+# In[91]:
 
 clf.fit(x,y)
 
@@ -102,7 +103,7 @@ clf.fit(x,y)
 # 
 # Next, we can predict and test. Let's print a prediction:
 
-# In[702]:
+# In[92]:
 
 to_predict = np.array([[-1.18, -1.76],[1.98, 1.16], [0,0],[4,4], [-5,-6]])
 clf.predict(to_predict)
@@ -110,7 +111,7 @@ clf.predict(to_predict)
 
 # We see the predictor is working as expected. We can use it to plot the dataset:
 
-# In[703]:
+# In[93]:
 
 w = clf.coef_[0]
 print(w)
@@ -142,7 +143,7 @@ plt.show()
 # 
 # 
 
-# In[704]:
+# In[94]:
 
 clf.decision_function(to_predict)
 
@@ -151,7 +152,7 @@ clf.decision_function(to_predict)
 # 
 # With the dataset generated we can create a ROC curve in order to check the quality of the classification. 
 
-# In[705]:
+# In[95]:
 
 # Binarize the output
 ybin = label_binarize(y, classes=[-1, 1])
@@ -194,7 +195,7 @@ plt.show()
 # 
 # The best approach to test the quality of the method is to run it with cross validation. To do this in python:
 
-# In[706]:
+# In[96]:
 
 # Classification and ROC analysis
 x, y = x[y != 2], y[y != 2]
@@ -233,7 +234,7 @@ plt.legend(loc="lower right")
 plt.show()
 
 
-# In[707]:
+# In[97]:
 
 # import some data to play with
 iris = datasets.load_iris()
@@ -284,19 +285,14 @@ plt.legend(loc="lower right")
 plt.show()
 
 
-# In[708]:
+# In[98]:
 
 for i, (train, test) in enumerate(cv):
     print(test)
     print(train)
 
 
-# In[709]:
+# In[99]:
 
 y
-
-
-# In[ ]:
-
-
 
